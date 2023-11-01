@@ -48,7 +48,7 @@ def discriminator():
     return discriminator
 
 generator = generator()
-discrimina()
+discriminator()
 
 discriminator.compile(
     loss=keras.losses.BinaryCrossentropy(from_logits=False), 
