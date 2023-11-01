@@ -1,44 +1,32 @@
 #!/usr/bin/env python3
-
+#baseline_discriminator
 
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, LeakyReLU
-from tensorflow.keras.models import Model
+from tensorflow import keras
+from tensorflow.keras import layers
 
-def build_discriminator(input_shape):
-    # Define the discriminator model
-    discriminator_input = Input(shape=input_shape)
-    
-    x = Conv2D(64, (5, 5), strides=(2, 2), padding='same')(discriminator_input)
-    x = LeakyReLU(alpha=0.2)(x)
-    
-    x = Conv2D(128, (5, 5), strides=(2, 2), padding='same')(x)
-    x = LeakyReLU(alpha=0.2)(x)
-    
-    x = Flatten()(x)
-    x = Dense(1, activation='sigmoid')(x)
-    
-    discriminator = Model(inputs=discriminator_input, outputs=x)
+def discriminator():
+    model = keras.Sequential()
 
-    return discriminator
+    # First convolutional layer
+    model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same', input_shape=[28, 28, 1]))
+    print("Added Conv2D layer with 64 filters")
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
 
-if __name__ == "__main__":
-    input_shape = (28, 28, 1)  # Input shape for discriminator (assuming MNIST image shape)
+    # Second convolutional layer
+    model.add(layers.Conv2D(128, (5, 5), strides=(2, 2), padding='same'))
+    print("Added Conv2D layer with 128 filters")
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
 
-    # Build the discriminator
-    discriminator = build_discriminator(input_shape)
-    
-    # Compile the discriminator
-    discriminator.compile(loss='binary_crossentropy', optimizer=tf.keras.optimizers.Adam(0.0002, 0.5), metrics=['accuracy'])
-    
-    # Print the discriminator summary
-    discriminator.summary()
+    # Flatten and Dense layers
+    model.add(layers.Flatten())
+    print("Added Flatten layer")
+    model.add(layers.Dense(1))
+    print("Added Dense layer with 1 unit")
 
-    # Print information about the discriminator
-    print("Discriminator Architecture:")
-    discriminator.summary(print_fn=lambda x: print(x))
+    return model
 
-    # Verify the discriminator's input shape
-    print(f"Discriminator Input Shape: {discriminator.input_shape}")
-
-
+# Calling the function
+discriminator = discriminator()
