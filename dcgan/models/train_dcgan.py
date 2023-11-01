@@ -1,90 +1,99 @@
 #!/usr/bin/env python3
 import tensorflow as tf
-import time
-import wandb
-from ..models.discriminator import build_discriminator
-from ..models.generator import build_generator
-#import sys
+from tensorflow import keras
+from tensorflow.keras import layers
 import numpy as np
-from ..data.data_loader import create_data_loaders
-
+import wandb
+import time
 
 wandb.init(project='gans', entity='joeannaavila123', dir='/logs/')
 
-input_shape = (28, 28, 1)
+def generator():
+    generator = keras.Sequential(
+        [   keras.Input(shape=(latent_dim)),
+            layers.Dense(7 * 7 * 256),
+            layers.Reshape((7, 7, 256)),
+            layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding="same"),
+            layers.BatchNormalization(),
+            layers.LeakyReLU(alpha=0.2),
+            layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding="same"),
+            layers.BatchNormalization(),
+            layers.LeakyReLU(alpha=0.2),
+            layers.Conv2DTranspose(1, (5, 5), strides=(2, 2), padding="same", activation="tanh"),
+        ],
+        name="generator",
+    )
+    print("Generator created with layers:")
+    for layer in generator.layers:
+        print(f"- {layer.name}")
+    return generator
 
-# Create instances of the generator and discriminator
-generator = build_generator(input_shape)
-discriminator = build_discriminator(input_shape)
+def discriminator():
+    discriminator = keras.Sequential(
+        [   keras.Input(shape=(28, 28, 1)),
+            layers.Conv2D(64, (5, 5), strides=(2, 2), padding="same"),
+            layers.LeakyReLU(alpha=0.2),
+            layers.Dropout(0.3),
+            layers.Conv2D(128, (5, 5), strides=(2, 2), padding="same"),
+            layers.LeakyReLU(alpha=0.2),
+            layers.Dropout(0.3),
+            layers.Flatten(),
+            layers.Dense(1, activation="sigmoid"),
+        ],
+        name="discriminator",
+    )
+    print("Discriminator created with layers:")
+    for layer in discriminator.layers:
+        print(f"- {layer.name}")
+    return discriminator
 
-# Define loss function
-loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+generator = generator()
+discrimina()
 
-# Define optimizers for generator and discriminator
-generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
-discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
+discriminator.compile(
+    loss=keras.losses.BinaryCrossentropy(from_logits=False), 
+    optimizer=keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5) 
+)
+discriminator.trainable = False
 
-latent_dim = 100 
-
-# Load images
-data_generator = tf.keras.preprocessing.image.ImageDataGenerator(
-    rescale=1./255,
+gan_input = keras.Input(shape=(latent_dim))
+gan_output = discriminator(generator(gan_input))
+gan = keras.models.Model(gan_input, gan_output)
+gan.compile(
+    loss=keras.losses.BinaryCrossentropy(from_logits=False),
+    optimizer=keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5)
 )
 
-batch_size = 64
-train_data_gen = data_generator.flow_from_directory(
-    'data/data_loader.py',
-    target_size=(28, 28),
-    batch_size=batch_size,
-    class_mode=None,
-    shuffle=True
-)
-
-# Convert the image dataset to a NumPy array
-x_train = np.concatenate([train_data_gen.next() for _ in range(len(train_data_gen))])
+(x_train, _), (_, _) = keras.datasets.mnist.load_data()
+x_train = x_train.reshape(-1, 28, 28, 1).astype("float32") / 255.0
 
 
-num_epochs = 100
+batch_size = 128
+epochs = 30
+save_interval = 10
 
-for epoch in range(num_epochs):
-    for batch in create_data_loaders():
-        start = time.time()
+real = np.ones((batch_size, 1))
+fake = np.zeros((batch_size, 1))
 
-        # Generate random noise vectors
-        noise = tf.random.normal([batch_size, latent_dim])
+for epoch in range(epochs):
+    start = time.time() # Start time for this epoch
 
-        # Generate fake images using the generator
-        fake_images = generator(noise, training=True)
+    idx = np.random.randint(0, x_train.shape[0], batch_size)
+    real_images = x_train[idx]
 
-        # Discriminator loss on real data
-        real_labels = tf.ones((batch_size, 1))
-        real_loss = loss_fn(real_labels, discriminator(batch, training=True))
+    noise = np.random.normal(0, 1, (batch_size, latent_dim))
+    fake_images = generator.predict(noise)
 
-        # Discriminator loss on fake data
-        fake_labels = tf.zeros((batch_size, 1))
-        fake_loss = loss_fn(fake_labels, discriminator(fake_images, training=True))
+    d_loss_real = discriminator.train_on_batch(real_images, real)
+    d_loss_fake = discriminator.train_on_batch(fake_images, fake)
+    d_loss = 0.5 * (d_loss_real + d_loss_fake)
 
-        # Total discriminator loss
-        discriminator_loss = real_loss + fake_loss
+    noise = np.random.normal(0, 1, (batch_size, latent_dim))
+    g_loss = gan.train_on_batch(noise, real)
 
-        # Generator loss
-        generator_loss = loss_fn(real_labels, discriminator(fake_images, training=True))
+    # Logging the losses, epoch, and time to wandb
+    wandb.log({"generator_loss": g_loss, "discriminator_loss": d_loss, "Epoch": epoch + 1, "Time": time.time() - start})
 
-        # wnb
-        wandb.log({"generator_loss": generator_loss, "discriminator_loss": discriminator_loss, "Epoch ": epoch + 1, "Time ": time.time() - start})
-        
-        # Gradient tape for backpropagation
-        with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-            # Generator loss gradient
-            gradients_of_generator = gen_tape.gradient(generator_loss, generator.trainable_variables)
+    if epoch % save_interval == 0:
+        print(f"Epoch {epoch}: Discriminator loss: {d_loss}, Generator loss: {g_loss}")
 
-            # Discriminator loss gradient
-            gradients_of_discriminator = disc_tape.gradient(discriminator_loss, discriminator.trainable_variables)
-
-        # Update generator and discriminator weights
-        generator_optimizer.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
-        discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
-
-# Save the trained generator model for generating new images
-generator.save('dcgan_generator.h5')
-#print(sys.path)
