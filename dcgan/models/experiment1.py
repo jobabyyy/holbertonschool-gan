@@ -42,7 +42,7 @@ def generator_variation():
 def discriminator_variation():
     discriminator = keras.Sequential(
         [
-            keras.Input(shape=(28, 28, 1)),  # Adjust the input shape to match generated image shape
+            keras.Input(shape=(28, 28, 1)),
             layers.Conv2D(64, (5, 5), strides=(2, 2), padding="same"),
             layers.LeakyReLU(alpha=0.2),
             layers.Dropout(0.3),
@@ -57,10 +57,12 @@ def discriminator_variation():
     print("Modified Discriminator created with layers:")
     for layer in discriminator.layers:
         print(f"- {layer.name}")
+
     return discriminator
 
 def generate(model, test_input):
     predictions = model(test_input, training=False)
+
     for i in range(predictions.shape[0]):
         plt.subplot(4, 4, i + 1)
         plt.imshow(predictions[i, :, :, :])
