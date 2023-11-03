@@ -10,7 +10,7 @@ import numpy as np
 import wandb
 import time
 import matplotlib.pyplot as plt
-import os
+import os 
 
 wandb.init(project='gans', entity='joeannaavila123', dir='/logs/')
 
